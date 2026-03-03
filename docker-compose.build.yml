@@ -2,10 +2,11 @@ version: '3'
 services:
   teletrans:
     container_name: teletrans
-    image: ghcr.io/ihategfw/teletrans:latest
+    build: .
+    image: teletrans:local
     restart: unless-stopped
     volumes:
       - .:/app/config
     environment:
-      # Prefer env var in Docker for DeepL official
       - DEEPL_AUTH_KEY=${DEEPL_AUTH_KEY-}
+

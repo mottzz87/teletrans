@@ -88,6 +88,12 @@ azure_region = azure_config['region'] if 'region' in azure_config else ''
 ## deeplx config
 deeplx_config = cfg['deeplx'] if 'deeplx' in cfg else {}
 deeplx_url = deeplx_config['url'] if 'url' in deeplx_config else 'https://api.deeplx.org/translate'
+## deepl official config
+deepl_config = cfg['deepl'] if 'deepl' in cfg else {}
+# Prefer env var in containerized environments
+deepl_auth_key = os.environ.get('DEEPL_AUTH_KEY') or deepl_config.get('auth_key', '')
+# Default to DeepL Free endpoint; Pro users can override via config/env if needed
+deepl_api_url = deepl_config.get('api_url', 'https://api-free.deepl.com/v2/translate')
 ## openai config
 openai_config = cfg['openai'] if 'openai' in cfg else {}
 openai_api_key = openai_config['api_key'] if 'api_key' in openai_config else ''
@@ -128,6 +134,26 @@ if translation_service == 'gemini':
         logger.error("Gemini translation service configuration is missing")
     genai.configure(api_key=gemini_api_key)
 
+if translation_service == 'deepl':
+    if not deepl_auth_key:
+        logger.error("DeepL official translation service configuration is missing (set deepl.auth_key or DEEPL_AUTH_KEY)")
+        exit()
+
+
+def normalize_deepl_lang(lang: str) -> str:
+    """
+    Normalize language codes for DeepL official API.
+    Accepts common forms like 'en', 'EN', 'en-us', 'pt_br' and returns 'EN', 'EN-US', 'PT-BR', etc.
+    """
+    if not lang:
+        return lang
+    lang = lang.strip().replace('_', '-')
+    if not lang:
+        return lang
+    parts = [p for p in lang.split('-') if p]
+    parts = [p.upper() for p in parts]
+    return '-'.join(parts)
+
 
 def remove_links(text):
     # regrex pattern for URL
@@ -160,9 +186,11 @@ async def translate_text(text, source_lang, target_langs) -> {}:
                 tasks.append(translate_azure(text_without_link, source_lang, target_lang, session))
             elif translation_service == 'deeplx':
                 tasks.append(translate_deeplx(text_without_link, source_lang, target_lang, session))
+            elif translation_service == 'deepl':
+                tasks.append(translate_deepl(text_without_link, source_lang, target_lang, session))
             else:
                 raise Exception(
-                    f"Unknown translation service: {translation_service}. Available services: openai, google, azure, deeplx")
+                    f"Unknown translation service: {translation_service}. Available services: openai, gemini, google, azure, deeplx, deepl")
         # 并发执行翻译任务。
         for lang, text in await asyncio.gather(*tasks):
             result[lang] = text
@@ -203,6 +231,47 @@ async def translate_deeplx(text, source_lang, target_lang, session):
             raise Exception(f"翻译失败")
 
     return target_lang, result['data']
+
+
+# 翻译DeepL Official API函数 (Free/Pro)
+async def translate_deepl(text, source_lang, target_lang, session):
+    """
+    DeepL official API:
+    - Free: https://api-free.deepl.com/v2/translate
+    - Pro:  https://api.deepl.com/v2/translate
+    """
+    url = deepl_api_url
+    headers = {
+        'Authorization': f'DeepL-Auth-Key {deepl_auth_key}',
+        'Content-Type': 'application/x-www-form-urlencoded',
+    }
+
+    # DeepL uses uppercase language codes, and allows omitting source_lang for auto-detect
+    tgt = normalize_deepl_lang(target_lang)
+    src = normalize_deepl_lang(source_lang)
+
+    data = {
+        'text': text,
+        'target_lang': tgt,
+    }
+    if src and src.lower() not in ('auto',):
+        data['source_lang'] = src
+
+    start_time = time.time()
+    async with session.post(url, headers=headers, data=data) as response:
+        logger.info(f"翻译从 {source_lang} 至 {target_lang} 耗时: {time.time() - start_time}")
+        response_text = await response.text()
+        if response.status != 200:
+            logger.error(f"DeepL 翻译失败：{response.status} {response_text}")
+            raise Exception("DeepL 翻译失败")
+
+        try:
+            result = json.loads(response_text)
+            translated = result['translations'][0]['text']
+            return target_lang, translated
+        except Exception as e:
+            logger.error(f"DeepL 响应解析失败：{response_text}")
+            raise Exception(f"DeepL 响应解析失败: {e}")
 
 
 # 翻译Azure API函数

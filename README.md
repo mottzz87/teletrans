@@ -1,6 +1,6 @@
 # TeleTrans - The Telegram Translator
 
-TeleTrans is a Python-based Telegram bot that translates messages in real-time. It uses the OpenAI API and Google/Azure/DeepLX API for translation.
+TeleTrans is a Python-based Telegram bot that translates messages in real-time. It uses OpenAI/Gemini and Google/Azure/DeepL (official)/DeepLX for translation.
 
 
 > [!WARNING]  
@@ -10,7 +10,7 @@ TeleTrans is a Python-based Telegram bot that translates messages in real-time. 
 
 - Real-time translation of messages.
 - Supports multiple languages.
-- Uses OpenAI/Gemini and Google/Azure/DeepLX for translation.
+- Uses OpenAI/Gemini and Google/Azure/DeepL (official)/DeepLX for translation.
 - Configurable source and target languages.
 - Command mode for enabling/disabling translation and setting languages.
 
@@ -60,6 +60,10 @@ TeleTrans is a Python-based Telegram bot that translates messages in real-time. 
          "endpoint": "https://api.cognitive.microsofttranslator.com/",
          "region": "global"
       },
+      "deepl": {
+         "auth_key": "your_deepl_auth_key",
+         "api_url": "https://api-free.deepl.com/v2/translate"
+      },
       "deeplx": {
          "url": "your_deeplx_url"
       },
@@ -80,10 +84,11 @@ TeleTrans is a Python-based Telegram bot that translates messages in real-time. 
    }
     ```
     - `api_id` and `api_hash` are required for the Telegram API. You can get them by creating a new application at [my.telegram.org](https://my.telegram.org).
-    - `translation_service` can be set to `openai`, `google`, `azure` or `deeplx`
+    - `translation_service` can be set to `openai`, `gemini`, `google`, `azure`, `deepl` (DeepL official) or `deeplx`
     - OpenAI/Gemini: You should keep the placeholder `tgt_lang` in the prompt.
     - Google: Click [here](https://cloud.google.com/translate/docs/setup) to create a Google Cloud project and get your Google Cloud credentials.
     - Azure: Click [here](https://learn.microsoft.com/en-us/azure/ai-services/translator/create-translator-resource) to create an Azure Translator resource and get your Azure key.
+    - DeepL official: Create an API key in your DeepL account, and use the Free endpoint `https://api-free.deepl.com/v2/translate`. You can also set `DEEPL_AUTH_KEY` as an environment variable (recommended in Docker).
     - DeepLX: Click [here](https://linux.do/t/topic/111737) to get your unique API url.
 
 6. Run the script with an optional argument to specify the working directory:
@@ -169,6 +174,10 @@ TeleTrans is a Python-based Telegram bot that translates messages in real-time. 
          "endpoint": "https://api.cognitive.microsofttranslator.com/",
          "region": "global"
       },
+      "deepl": {
+         "auth_key": "your_deepl_auth_key",
+         "api_url": "https://api-free.deepl.com/v2/translate"
+      },
       "deeplx": {
          "url": "your_deeplx_url"
       },
@@ -189,18 +198,44 @@ TeleTrans is a Python-based Telegram bot that translates messages in real-time. 
    }
     ```
     - `api_id` and `api_hash` are required for the Telegram API. You can get them by creating a new application at [my.telegram.org](https://my.telegram.org).
-    - `translation_service` can be set to `openai`, `google`, `azure` or `deeplx`
+    - `translation_service` can be set to `openai`, `gemini`, `google`, `azure`, `deepl` (DeepL official) or `deeplx`
     - OpenAI/Gemini: You should keep the placeholder `tgt_lang` in the prompt.
     - Google: Click [here](https://cloud.google.com/translate/docs/setup) to create a Google Cloud project and get your Google Cloud credentials.
     - Azure: Click [here](https://learn.microsoft.com/en-us/azure/ai-services/translator/create-translator-resource) to create an Azure Translator resource and get your Azure key.
+    - DeepL official: You can keep `deepl.auth_key` in `config.json`, or set `DEEPL_AUTH_KEY` via Docker environment variable.
     - DeepLX: Click [here](https://linux.do/t/topic/111737) to get your unique API url.
 
 4. Run the bot with Docker:
    ```sh
    docker run -itd --name teletrans -v $(pwd):/app/config --restart=unless-stopped ghcr.io/ihategfw/teletrans:latest
    ```
+   If you build your own image, you can do:
+   ```sh
+   docker build -t yourname/teletrans:latest .
+   docker run -itd --name teletrans -v $(pwd):/app/config --restart=unless-stopped -e DEEPL_AUTH_KEY=xxx yourname/teletrans:latest
+   ```
+   Or with docker compose:
+   ```sh
+   # prebuilt image
+   docker compose up -d
 
-5. For the first time, you need to execute the following command to log in to your Telegram account:
+   # build locally
+   docker compose -f docker-compose.build.yml up -d --build
+   ```
+
+5. Build & publish to Docker registry (optional):
+   ```sh
+   # Build locally
+   docker build -t yourname/teletrans:0.1.0 .
+
+   # Push (Docker Hub example)
+   docker push yourname/teletrans:0.1.0
+
+   # Multi-arch with buildx (recommended)
+   docker buildx build --platform linux/amd64,linux/arm64 -t yourname/teletrans:0.1.0 --push .
+   ```
+
+6. For the first time, you need to execute the following command to log in to your Telegram account:
    ```sh
    docker exec -it teletrans python teletrans.py /app/config
    ```
